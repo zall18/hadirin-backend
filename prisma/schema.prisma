@@ -1,0 +1,635 @@
+// =======================
+// GENERATOR & DATASOURCE
+// =======================
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["fullTextIndex"]
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+// =======================
+// ENUMS
+// =======================
+
+enum UserRole {
+  SUPER_ADMIN // pemilik platform SaaS, manage semua event & admin
+  ADMIN // wedding organizer / calon pengantin, full access per event
+  STAFF // usher / penerima tamu, akses terbatas operasional hari-H
+}
+
+enum GuestStatus {
+  INVITED // tamu sudah diinput, belum konfirmasi
+  CONFIRMED // tamu sudah konfirmasi hadir (RSVP)
+  ATTENDED // tamu sudah check-in di lokasi
+  CANCELLED // tamu batalkan kehadiran
+  NO_SHOW // tamu tidak hadir tanpa konfirmasi
+}
+
+enum RSVPStatus {
+  PENDING // belum merespons
+  CONFIRMED // konfirmasi hadir
+  DECLINED // konfirmasi tidak hadir
+  MAYBE // mungkin hadir
+}
+
+enum CheckInMethod {
+  QR_SCAN // scan QR code dari undangan digital
+  MANUAL_SEARCH // cari nama / nomor telepon oleh staff
+  MANUAL_ENTRY // input manual oleh staff (tamu walk-in)
+}
+
+enum InvitationType {
+  PUBLIC // link undangan bisa diakses siapa saja
+  PRIVATE // hanya yang punya QR code / link undangan khusus
+}
+
+enum VenueType {
+  INDOOR
+  OUTDOOR
+  BALLROOM
+  GARDEN
+  BEACH
+  MASJID
+  CHURCH
+  TEMPLE
+  GEDUNG
+  HOTEL
+  VILLA
+  OTHER
+}
+
+enum ReligionType {
+  ISLAM
+  KRISTEN
+  KATOLIK
+  HINDU
+  BUDDHA
+  KONGHUCU
+  OTHER
+}
+
+enum PhotoDeliveryStatus {
+  PENDING // foto baru diupload, menunggu proses
+  PROCESSING // sedang dikompres / diproses
+  SENDING // sedang dikirim via WhatsApp
+  DELIVERED // berhasil terkirim ke WhatsApp tamu
+  FAILED // gagal kirim, perlu retry
+}
+
+enum EventSessionType {
+  AKAD // akad nikah / pemberkatan
+  RESEPSI // resepsi / pesta
+  PENGAJIAN // pengajian / siraman
+  LAMARAN // acara lamaran
+  OTHER
+}
+
+enum GuestCategory {
+  FAMILY // keluarga inti
+  RELATIVE // kerabat
+  FRIEND // teman
+  COLLEAGUE // rekan kerja
+  VVIP // tamu VIP utama
+  VIP // tamu VIP
+  VENDOR // vendor acara
+  MEDIA // media / pers
+  REGULAR // umum
+}
+
+enum ImportStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
+}
+
+// =======================
+// EVENT (WEDDING)
+// =======================
+model Event {
+  // 🔑 Identifiers
+  id        Int    @id @default(autoincrement())
+  slug      String @unique // URL-friendly: "andi-sari-2025"
+  shortCode String @unique @db.VarChar(6) // kode display: "AB123C"
+
+  // 👰🤵 Couple Info
+  groomName       String // nama mempelai pria
+  groomNickname   String? // nama panggilan pria
+  groomFatherName String? // nama ayah mempelai pria
+  groomMotherName String? // nama ibu mempelai pria
+  groomPhotoUrl   String? // foto mempelai pria
+
+  brideName       String // nama mempelai wanita
+  brideNickname   String? // nama panggilan wanita
+  brideFatherName String? // nama ayah mempelai wanita
+  brideMotherName String? // nama ibu mempelai wanita
+  bridePhotoUrl   String? // foto mempelai wanita
+
+  weddingTitle String // "The Wedding of Andi & Sari"
+  religion     ReligionType? // agama / jenis prosesi
+
+  // 🗓️ Date & Time (main date — detail per sesi ada di EventSession)
+  weddingDate      DateTime // tanggal utama pernikahan
+  weddingDateHijri String? // tanggal hijriah (opsional)
+
+  // 📍 Primary Venue
+  venueName      String
+  venueType      VenueType
+  venueAddress   String
+  venueCity      String?
+  venueProvince  String?
+  googleMapsUrl  String?
+  venueLatitude  Float?
+  venueLongitude Float?
+
+  // 🎨 Branding & Theme
+  primaryColor   String   @default("#7C3AED")
+  secondaryColor String   @default("#F9A8D4")
+  fontFamily     String   @default("serif")
+  logoUrl        String?
+  coverImageUrl  String?
+  galleryImages  String[] // array URL foto galeri
+
+  // 📝 Story & Content
+  loveStory    String? @db.Text // cerita singkat pasangan
+  greetingText String? @db.Text // sambutan di halaman undangan
+
+  // 🔐 Access & Settings
+  invitationType InvitationType @default(PRIVATE)
+  isActive       Boolean        @default(true)
+  isPublished    Boolean        @default(false) // publish halaman undangan publik
+  publishedAt    DateTime?
+
+  // ⚙️ Feature Toggles
+  enableRSVP           Boolean @default(true) // aktifkan fitur RSVP
+  enablePhotoBoothWA   Boolean @default(false) // aktifkan photo booth + kirim WA (Phase 2)
+  autoSendPhotoToWA    Boolean @default(false) // kirim foto otomatis ke WA tamu
+  enableGuestWishes    Boolean @default(true) // kolom ucapan / doa tamu
+  enableLiveCount      Boolean @default(true) // tampilkan jumlah tamu hadir real-time
+  allowWalkIn          Boolean @default(true) // izinkan tamu walk-in (tanpa undangan)
+  requireRSVPToCheckIn Boolean @default(false) // wajib RSVP sebelum check-in
+
+  // 📊 Counters (di-update via trigger / cron)
+  totalGuests    Int @default(0)
+  confirmedCount Int @default(0)
+  attendedCount  Int @default(0)
+  wishesCount    Int @default(0)
+
+  // 🏢 Multi-Tenant: owner admin
+  ownerId Int
+  owner   User @relation("EventOwner", fields: [ownerId], references: [id])
+
+  // 📝 Timestamps
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime? // soft delete
+
+  // 🔗 Relations
+  users        UserEventAccess[]
+  sessions     EventSession[] // sesi-sesi acara (akad, resepsi, dll)
+  guests       Guest[]
+  checkIns     CheckInLog[]
+  photos       EventPhoto[]
+  whatsAppLogs WhatsAppLog[]
+  guestWishes  GuestWish[]
+  eventStats   EventStats[]
+  guestImports GuestImport[]
+
+  // 🔍 Indexes
+  @@index([slug])
+  @@index([shortCode])
+  @@index([ownerId])
+  @@index([isActive, isPublished])
+  @@index([weddingDate])
+}
+
+// =======================
+// EVENT SESSION (Akad, Resepsi, dll)
+// =======================
+model EventSession {
+  id      Int   @id @default(autoincrement())
+  eventId Int
+  event   Event @relation(fields: [eventId], references: [id])
+
+  name        String // "Akad Nikah", "Resepsi"
+  sessionType EventSessionType @default(RESEPSI)
+  description String?
+
+  // 🗓️ Waktu
+  date      DateTime
+  startTime DateTime
+  endTime   DateTime
+
+  // 📍 Lokasi (bisa berbeda dari event utama)
+  venueName     String?
+  venueType     VenueType?
+  venueAddress  String?
+  googleMapsUrl String?
+
+  // ⚙️ Settings per sesi
+  hasCheckIn     Boolean   @default(true) // apakah sesi ini butuh check-in
+  checkInOpenAt  DateTime? // waktu buka check-in
+  checkInCloseAt DateTime? // waktu tutup check-in
+  maxCapacity    Int? // kapasitas maksimum
+
+  sortOrder Int @default(0) // urutan tampil
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  checkIns CheckInLog[]
+
+  @@index([eventId, date])
+  @@index([sessionType])
+}
+
+// =======================
+// USER
+// =======================
+model User {
+  id       Int     @id @default(autoincrement())
+  email    String  @unique
+  phone    String? @db.VarChar(20)
+  password String // hashed bcrypt
+
+  name      String
+  avatarUrl String?
+  role      UserRole @default(STAFF)
+
+  // 🔐 Auth
+  emailVerifiedAt   DateTime?
+  passwordChangedAt DateTime?
+  lastLoginAt       DateTime?
+  lastLoginIp       String?
+  loginAttempts     Int       @default(0)
+  lockedUntil       DateTime?
+
+  // Status
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime? // soft delete
+
+  // 🔗 Relations
+  ownedEvents  Event[]           @relation("EventOwner") // event yang dimiliki (Admin)
+  eventAccess  UserEventAccess[] // akses ke event (STAFF/ADMIN)
+  checkIns     CheckInLog[]
+  takenPhotos  EventPhoto[]
+  guestImports GuestImport[]
+
+  // Indexes
+  @@index([email])
+  @@index([role])
+  @@index([isActive])
+}
+
+// =======================
+// USER EVENT ACCESS (Multi-Tenant RBAC)
+// =======================
+// Relasi User <-> Event dengan role per event
+// Super Admin: tidak perlu entri ini (akses global)
+// Admin: owner event (via Event.ownerId)
+// Staff: perlu entri ini, terikat ke 1 event
+model UserEventAccess {
+  id     Int  @id @default(autoincrement())
+  userId Int
+  user   User @relation(fields: [userId], references: [id])
+
+  eventId Int
+  event   Event @relation(fields: [eventId], references: [id])
+
+  role        UserRole @default(STAFF)
+  permissions String[] // granular permissions jika dibutuhkan: ["checkin", "photo"]
+
+  // Staff temporary account
+  isTemporary Boolean   @default(false) // akun sementara hari-H
+  expiresAt   DateTime? // auto-expire setelah acara
+
+  createdAt DateTime  @default(now())
+  revokedAt DateTime? // tanggal akses dicabut
+
+  @@unique([userId, eventId])
+  @@index([userId])
+  @@index([eventId])
+  @@index([role])
+}
+
+// =======================
+// GUEST
+// =======================
+model Guest {
+  id Int @id @default(autoincrement())
+
+  // 👤 Identitas
+  name  String
+  phone String  @db.VarChar(20)
+  email String?
+  title String? // "Bpk.", "Ibu", "Dr.", "Prof." dll
+
+  // 🏷️ Klasifikasi
+  category  GuestCategory @default(REGULAR)
+  groupName String? // nama grup / instansi
+  tags      String[] // label bebas: ["keluarga besar", "jakarta"]
+
+  // 👨‍👩‍👧 Rombongan
+  invitedCount   Int @default(1) // jumlah undangan yang diberikan
+  plusOneAllowed Int @default(0) // boleh bawa +1 berapa orang
+  actualCount    Int @default(0) // jumlah yang benar-benar hadir (diisi saat check-in)
+
+  // 🎫 QR & Identifikasi
+  status  GuestStatus @default(INVITED)
+  qrCode  String      @unique @default(uuid()) // UUID untuk QR code
+  shortId String      @unique @db.VarChar(8) // ID pendek untuk pencarian cepat
+
+  // 📲 RSVP
+  rsvpStatus RSVPStatus @default(PENDING)
+  rsvpNote   String?    @db.Text
+  rsvpDate   DateTime?
+  rsvpIp     String? // IP address saat RSVP (anti-spam)
+
+  // ✅ Check-In
+  checkedInAt DateTime?
+  checkedInBy String? // nama staff yang check-in
+
+  // 💌 WhatsApp Undangan
+  waInvitationSentAt DateTime? // kapan undangan digital dikirim
+  waMessageId        String? // message ID dari WhatsApp API
+
+  // 📎 Notes
+  notes      String? @db.Text // catatan internal admin
+  seatNumber String? // nomor kursi / meja
+  giftNote   String? // catatan souvenir / hadiah
+
+  // 🔗 Event
+  eventId Int
+  event   Event @relation(fields: [eventId], references: [id])
+
+  // 📝 Timestamps
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+  deletedAt DateTime? // soft delete
+
+  // 🔗 Relations
+  checkIns     CheckInLog[]
+  photos       EventPhoto[]
+  whatsAppLogs WhatsAppLog[]
+  guestWishes  GuestWish[]
+
+  // Constraints
+  @@unique([eventId, phone]) // 1 nomor HP per event
+  @@index([eventId])
+  @@index([phone])
+  @@index([qrCode])
+  @@index([shortId])
+  @@index([status])
+  @@index([category])
+  @@index([rsvpStatus])
+  @@index([eventId, status])
+}
+
+// =======================
+// CHECK-IN LOG
+// =======================
+model CheckInLog {
+  id Int @id @default(autoincrement())
+
+  guestId Int
+  guest   Guest @relation(fields: [guestId], references: [id])
+
+  eventId Int
+  event   Event @relation(fields: [eventId], references: [id])
+
+  // Sesi mana tamu ini check-in
+  sessionId Int?
+  session   EventSession? @relation(fields: [sessionId], references: [id])
+
+  // Detail check-in
+  arrivedCount Int           @default(1) // jumlah orang yang check-in (rombongan)
+  method       CheckInMethod
+
+  checkedInById Int?
+  checkedInBy   User? @relation(fields: [checkedInById], references: [id])
+
+  // 📸 Foto check-in (Photo Booth - Phase 2)
+  photoId Int?        @unique
+  photo   EventPhoto? @relation(fields: [photoId], references: [id])
+
+  // Device info
+  deviceType    String? // "mobile", "tablet", "desktop"
+  deviceBrowser String?
+  ipAddress     String?
+
+  // Notes
+  note String? // catatan staff saat check-in
+
+  checkedInAt DateTime @default(now())
+
+  @@index([eventId, checkedInAt])
+  @@index([guestId])
+  @@index([checkedInById])
+  @@index([method])
+  @@index([sessionId])
+}
+
+// =======================
+// EVENT PHOTO
+// =======================
+model EventPhoto {
+  id Int @id @default(autoincrement())
+
+  // 📁 File Info
+  filename      String
+  filePath      String // path di storage (S3 / local)
+  thumbnailPath String? // path thumbnail yang dikompres
+  originalPath  String? // path file original sebelum kompres
+
+  fileSize Int // bytes
+  mimeType String // "image/jpeg", "image/png"
+  width    Int?
+  height   Int?
+
+  // 🔗 Relasi
+  eventId Int
+  event   Event @relation(fields: [eventId], references: [id])
+
+  guestId Int?
+  guest   Guest? @relation(fields: [guestId], references: [id])
+
+  takenById Int?
+  takenBy   User? @relation(fields: [takenById], references: [id])
+
+  takenAt DateTime @default(now())
+
+  // 📲 WhatsApp Delivery Status
+  waStatus    PhotoDeliveryStatus @default(PENDING)
+  waMessageId String?
+  waError     String?
+  waSentAt    DateTime?
+
+  retryCount  Int       @default(0)
+  nextRetryAt DateTime? // jadwal retry pengiriman
+
+  // 🔗 Relasi ke check-in (1:1)
+  checkInLog CheckInLog?
+
+  whatsAppLogs WhatsAppLog[]
+
+  @@index([eventId, takenAt])
+  @@index([guestId])
+  @@index([waStatus])
+  @@index([takenById])
+}
+
+// =======================
+// WHATSAPP MESSAGE LOG
+// =======================
+model WhatsAppLog {
+  id Int @id @default(autoincrement())
+
+  // Message Info
+  messageId  String  @unique // ID dari WhatsApp Cloud API
+  templateId String? // nama template WA yang digunakan
+
+  // Penerima
+  toPhone String  @db.VarChar(20)
+  toName  String?
+
+  // Konten
+  messageType String  @default("INVITATION") // "INVITATION", "PHOTO", "REMINDER", "TEXT"
+  caption     String? @db.Text
+
+  // Referensi
+  photoId Int?
+  photo   EventPhoto? @relation(fields: [photoId], references: [id])
+
+  guestId Int?
+  guest   Guest? @relation(fields: [guestId], references: [id])
+
+  eventId Int
+  event   Event @relation(fields: [eventId], references: [id])
+
+  // Status delivery
+  status    String  @default("SENT") // "QUEUED", "SENT", "DELIVERED", "READ", "FAILED"
+  error     String?
+  errorCode String?
+
+  // Timestamps
+  sentAt      DateTime  @default(now())
+  deliveredAt DateTime?
+  readAt      DateTime?
+
+  @@index([eventId, sentAt])
+  @@index([toPhone])
+  @@index([guestId])
+  @@index([photoId])
+  @@index([status])
+  @@index([messageType])
+}
+
+// =======================
+// GUEST WISH / UCAPAN
+// =======================
+model GuestWish {
+  id Int @id @default(autoincrement())
+
+  message   String  @db.Text
+  fromName  String
+  fromPhone String? @db.VarChar(20)
+
+  // Moderasi
+  isPublic   Boolean @default(true) // tampilkan di halaman publik
+  isApproved Boolean @default(true) // perlu approve admin (opsional)
+  isPinned   Boolean @default(false) // pin ucapan favorit
+
+  eventId Int
+  event   Event @relation(fields: [eventId], references: [id])
+
+  guestId Int?
+  guest   Guest? @relation(fields: [guestId], references: [id])
+
+  createdAt DateTime @default(now())
+
+  @@index([eventId, createdAt])
+  @@index([guestId])
+  @@index([isPublic, isApproved])
+}
+
+// =======================
+// GUEST IMPORT (Excel Upload)
+// =======================
+model GuestImport {
+  id Int @id @default(autoincrement())
+
+  eventId Int
+  event   Event @relation(fields: [eventId], references: [id])
+
+  uploadedById Int
+  uploadedBy   User @relation(fields: [uploadedById], references: [id])
+
+  fileName String
+  filePath String
+  fileSize Int
+
+  status       ImportStatus @default(PENDING)
+  totalRows    Int          @default(0)
+  successCount Int          @default(0)
+  failedCount  Int          @default(0)
+  skippedCount Int          @default(0) // duplikat yang di-skip
+
+  errorLog Json? // detail baris yang gagal
+
+  startedAt   DateTime?
+  completedAt DateTime?
+  createdAt   DateTime  @default(now())
+
+  @@index([eventId])
+  @@index([uploadedById])
+  @@index([status])
+}
+
+// =======================
+// REAL-TIME DASHBOARD STATS (snapshot per jam)
+// =======================
+model EventStats {
+  id Int @id @default(autoincrement())
+
+  eventId Int
+  event   Event @relation(fields: [eventId], references: [id])
+
+  // 📊 Tamu
+  totalGuests     Int @default(0)
+  guestsInvited   Int @default(0)
+  guestsConfirmed Int @default(0)
+  guestsAttended  Int @default(0)
+  guestsPending   Int @default(0)
+  guestsCancelled Int @default(0)
+  guestsNoShow    Int @default(0)
+
+  // 📊 RSVP
+  rsvpConfirmed Int @default(0)
+  rsvpDeclined  Int @default(0)
+  rsvpPending   Int @default(0)
+
+  // 📊 Check-In
+  checkInsLastHour Int     @default(0)
+  peakHour         String? // "19:00"
+  peakHourCount    Int     @default(0)
+
+  // 📸 Photo Stats (Phase 2)
+  photosTaken  Int @default(0)
+  photosSent   Int @default(0)
+  photosFailed Int @default(0)
+
+  // 💬 Wishes
+  totalWishes Int @default(0)
+
+  // Snapshot waktu
+  snapshotTime DateTime @default(now())
+
+  @@unique([eventId, snapshotTime])
+  @@index([eventId])
+  @@index([snapshotTime])
+}
