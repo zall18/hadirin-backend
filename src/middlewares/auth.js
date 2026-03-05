@@ -3,7 +3,14 @@ const jwt = require('jsonwebtoken');
 const { jwtSecret } = require('../config/jwt');
 const { PrismaClient } = require('@prisma/client');
 
-const prisma = new PrismaClient();
+const pg = require('pg');
+const { PrismaPg } = require('@prisma/adapter-pg');
+
+const pool = new pg.Pool({
+  connectionString: process.env.DATABASE_URL,
+});
+const adapter = new PrismaPg(pool);
+const prisma = new PrismaClient({ adapter });
 
 /**
  * Middleware untuk verifikasi token JWT
@@ -12,14 +19,15 @@ const verifyToken = async (req, res, next) => {
   try {
     // Ambil token dari header Authorization
     const authHeader = req.headers.authorization;
-    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    const authCookies = req.cookies?.token;
+    if ((!authHeader || !authHeader.startsWith('Bearer ')) && !authCookies) {
       return res.status(401).json({
         success: false,
         message: 'No token provided',
       });
     }
 
-    const token = authHeader.split(' ')[1];
+    const token = authCookies || authHeader.split(' ')[1];
     
     // Verifikasi token
     const decoded = jwt.verify(token, jwtSecret);

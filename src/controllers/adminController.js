@@ -2,8 +2,14 @@
 const bcrypt = require('bcryptjs');
 const { validationResult } = require('express-validator');
 const { PrismaClient } = require('@prisma/client');
+const pg = require('pg');
+const { PrismaPg } = require('@prisma/adapter-pg');
 
-const prisma = new PrismaClient();
+const pool = new pg.Pool({
+  connectionString: process.env.DATABASE_URL,
+});
+const adapter = new PrismaPg(pool);
+const prisma = new PrismaClient({ adapter });
 
 /**
  * Membuat akun Admin baru (hanya oleh Super Admin)

@@ -2,12 +2,12 @@
 const express = require('express');
 const router = express.Router();
 const adminController = require('../controllers/adminController');
-const { verifyToken, isSuperAdmin } = require('../middleware/auth');
+const { verifyToken, isSuperAdmin } = require('../middlewares/auth');
 const {
   createAdminValidator,
   createSuperAdminValidator,
   updateAdminValidator,
-} = require('../validators/adminValidators');
+} = require('../validators/adminValidator');
 
 /**
  * @route   POST /api/admin/create-super-admin

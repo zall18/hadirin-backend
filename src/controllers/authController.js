@@ -4,8 +4,14 @@ const jwt = require('jsonwebtoken');
 const { validationResult } = require('express-validator');
 const { PrismaClient } = require('@prisma/client');
 const { jwtSecret, jwtExpiresIn, jwtRefreshSecret, jwtRefreshExpiresIn } = require('../config/jwt');
+const pg = require('pg');
+const { PrismaPg } = require('@prisma/adapter-pg');
 
-const prisma = new PrismaClient();
+const pool = new pg.Pool({
+  connectionString: process.env.DATABASE_URL,
+});
+const adapter = new PrismaPg(pool);
+const prisma = new PrismaClient({ adapter });
 
 /**
  * Generate JWT tokens
@@ -126,6 +132,8 @@ const login = async (req, res) => {
 
     const { email, password, ipAddress } = req.body;
 
+    console.log("test");
+
     // Cari user berdasarkan email
     const user = await prisma.user.findUnique({
       where: { email },
@@ -165,9 +173,9 @@ const login = async (req, res) => {
         message: `Account is locked until ${user.lockedUntil}. Please try again later.`,
       });
     }
-
     // Verifikasi password
-    const isValidPassword = await bcrypt.compare(password, user.password);
+    const isValidPassword = await bcrypt.compare(password , user.password);
+    // console.log("is valid password " + isValidPassword);
     if (!isValidPassword) {
       // Increment login attempts
       const updatedUser = await prisma.user.update({
@@ -212,6 +220,20 @@ const login = async (req, res) => {
     // Generate tokens
     const { accessToken, refreshToken } = generateTokens(updatedUser);
 
+    res.cookie('token', accessToken, {
+          httpOnly: true,
+          secure: false,
+          sameSite: 'lax',
+          maxAge: 24 * 60 * 60 * 1000
+      });
+    res.cookie('refreshToken', refreshToken, {
+          httpOnly: true,
+          secure: false,
+          sameSite: 'lax',
+          maxAge: 24 * 60 * 60 * 1000
+      });
+
+
     return res.status(200).json({
       success: true,
       message: 'Login successful',
@@ -241,8 +263,10 @@ const login = async (req, res) => {
 const refreshToken = async (req, res) => {
   try {
     const { refreshToken } = req.body;
+    const refreshTokenCookie = req.cookies?.refreshToken;
+    console.log(refreshTokenCookie);
 
-    if (!refreshToken) {
+    if (!refreshTokenCookie && !refreshToken) {
       return res.status(400).json({
         success: false,
         message: 'Refresh token is required',
@@ -250,7 +274,7 @@ const refreshToken = async (req, res) => {
     }
 
     // Verifikasi refresh token
-    const decoded = jwt.verify(refreshToken, jwtRefreshSecret);
+    const decoded = jwt.verify(refreshToken ? refreshToken : refreshTokenCookie, jwtRefreshSecret);
 
     // Cari user
     const user = await prisma.user.findUnique({
@@ -273,6 +297,19 @@ const refreshToken = async (req, res) => {
 
     // Generate new tokens
     const tokens = generateTokens(user);
+
+      res.cookie('token', tokens.accessToken, {
+        httpOnly: true,
+        secure: false,
+        sameSite: 'lax',
+        maxAge: 24 * 60 * 60 * 1000
+    });
+    res.cookie('refreshToken', tokens.refreshToken, {
+          httpOnly: true,
+          secure: false,
+          sameSite: 'lax',
+          maxAge: 24 * 60 * 60 * 1000
+      });
 
     return res.status(200).json({
       success: true,

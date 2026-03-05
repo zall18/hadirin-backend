@@ -2,14 +2,14 @@
 const express = require('express');
 const router = express.Router();
 const authController = require('../controllers/authController');
-const { verifyToken } = require('../middleware/auth');
+const { verifyToken } = require('../middlewares/auth');
 const {
   registerValidator,
   loginValidator,
   changePasswordValidator,
   forgotPasswordValidator,
   resetPasswordValidator,
-} = require('../validators/authValidators');
+} = require('../validators/authValidator');
 
 /**
  * @route   POST /api/auth/register

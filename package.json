@@ -3,8 +3,8 @@
   "version": "0.0.0",
   "private": true,
   "scripts": {
-    "start": "nodemon index.js",
-    "dev": "nodemon index.js", 
+    "start": "nodemon app.js",
+    "dev": "nodemon index.js",
     "create-super-admin": "node scripts/createSuperAdmin.js"
   },
   "dependencies": {
@@ -20,6 +20,7 @@
     "jade": "~1.11.0",
     "jsonwebtoken": "^9.0.3",
     "morgan": "~1.9.1",
+    "multer": "^2.1.1",
     "pg": "^8.19.0"
   },
   "devDependencies": {
