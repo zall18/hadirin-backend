@@ -28,7 +28,7 @@ router.use(verifyToken);
  */
 router.post(
   '/',
-  authorize('ADMIN'),
+  authorize('ADMIN', 'SUPER_ADMIN'),
   createEventValidator,
   eventController.createEvent
 );

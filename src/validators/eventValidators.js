@@ -202,6 +202,11 @@ const updateEventValidator = [
     .optional()
     .isBoolean()
     .withMessage('isActive must be a boolean'),
+
+    body('clientId')
+  .optional()
+  .isInt()
+  .withMessage('Client ID must be an integer'),
 ];
 
 const eventIdValidator = [

@@ -17,6 +17,7 @@ datasource db {
 enum UserRole {
   SUPER_ADMIN // pemilik platform SaaS, manage semua event & admin
   ADMIN // wedding organizer / calon pengantin, full access per event
+  CLIENT
   STAFF // usher / penerima tamu, akses terbatas operasional hari-H
 }
 
@@ -182,6 +183,9 @@ model Event {
   ownerId Int
   owner   User @relation("EventOwner", fields: [ownerId], references: [id])
 
+  clientId Int? // Client (pengantin) yang punya event ini
+  client   User? @relation("EventClient", fields: [clientId], references: [id])
+
   // 📝 Timestamps
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
@@ -197,6 +201,8 @@ model Event {
   guestWishes  GuestWish[]
   eventStats   EventStats[]
   guestImports GuestImport[]
+  user         User?             @relation(fields: [userId], references: [id])
+  userId       Int?
 
   // 🔍 Indexes
   @@index([slug])
@@ -279,6 +285,8 @@ model User {
   checkIns     CheckInLog[]
   takenPhotos  EventPhoto[]
   guestImports GuestImport[]
+  events       Event[]
+  clientEvents Event[]           @relation("EventClient")
 
   // Indexes
   @@index([email])

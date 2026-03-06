@@ -2,7 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const dashboardController = require('../controllers/dashboardController');
-const { verifyToken, authorize, isSuperAdmin } = require('../middleware/auth');
+const { verifyToken, authorize, isSuperAdmin } = require('../middlewares/auth');
 
 /**
  * @route   GET /api/dashboard/super-admin

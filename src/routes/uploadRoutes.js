@@ -2,7 +2,7 @@
 const express = require('express');
 const router = express.Router({ mergeParams: true });
 const uploadController = require('../controllers/uploadController');
-const { verifyToken, authorize } = require('../middleware/auth');
+const { verifyToken, authorize } = require('../middlewares/auth');
 const upload = require('../utils/upload');
 
 // Semua route memerlukan auth dan role ADMIN

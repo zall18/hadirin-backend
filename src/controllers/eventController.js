@@ -32,7 +32,7 @@ const createEvent = async (req, res) => {
     const userId = req.user.id;
 
     // Cek apakah user adalah ADMIN
-    if (req.user.role !== 'ADMIN') {
+    if (req.user.role !== 'ADMIN' && req.user.role !== 'SUPER_ADMIN') {
       return res.status(403).json({
         success: false,
         message: 'Forbidden: Only ADMIN can create events',
