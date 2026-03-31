@@ -30,12 +30,13 @@ const createEvent = async (req, res) => {
     }
 
     const userId = req.user.id;
+    const userRole = req.user.role;
 
-    // Cek apakah user adalah ADMIN
-    if (req.user.role !== 'ADMIN' && req.user.role !== 'SUPER_ADMIN') {
+    // Cek apakah user adalah ADMIN atau CLIENT
+    if (!['ADMIN', 'CLIENT'].includes(userRole)) {
       return res.status(403).json({
         success: false,
-        message: 'Forbidden: Only ADMIN can create events',
+        message: 'Forbidden: Only ADMIN or CLIENT can create events',
       });
     }
 
@@ -78,7 +79,32 @@ const createEvent = async (req, res) => {
       enableLiveCount,
       allowWalkIn,
       requireRSVPToCheckIn,
+      clientId
     } = req.body;
+
+    if (userRole === 'CLIENT') {
+      if (clientId && clientId !== userId) {
+        return res.status(403).json({
+          success: false,
+          message: 'Client can only create events for themselves',
+        });
+      }
+      // Set clientId ke userId jika tidak diberikan
+      clientId = userId;
+    } else if (userRole === 'ADMIN' && clientId) {
+      // Validasi clientId yang diberikan adalah user dengan role CLIENT
+      const client = await prisma.user.findUnique({
+        where: { id: parseInt(clientId) },
+        select: { role: true },
+      });
+      if (!client || client.role !== 'CLIENT') {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid client ID: user must be a CLIENT',
+        });
+      }
+      clientId = parseInt(clientId);
+    }
 
     // Generate slug dan short code
     const slug = generateSlug(groomName, brideName);
@@ -806,9 +832,7 @@ const duplicateEvent = async (req, res) => {
         weddingTitle: `${eventData.weddingTitle} (Copy)`,
         isPublished: false,
         publishedAt: null,
-        owner: {
-          connect: { id: userId },
-        },
+        ownerId: userId,
         // Duplicate sessions
         sessions: {
           create: sessions.map(session => ({
