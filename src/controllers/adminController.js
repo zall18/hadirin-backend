@@ -191,6 +191,7 @@ const getAllAdmins = async (req, res) => {
     // Build where clause
     const where = {
       role: 'ADMIN',
+      deletedAt: null,
       ...(search && {
         OR: [
           { name: { contains: search, mode: 'insensitive' } },

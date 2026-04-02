@@ -292,7 +292,10 @@ const getEventDashboard = async (req, res) => {
         category: g.category,
         count: g._count,
       })),
-      checkInsPerHour: checkInsLast24Hours,
+      checkInsPerHour: checkInsLast24Hours.map(item => ({
+        hour: item.hour,
+        count: Number(item.count) // <-- Ubah BigInt jadi Number biasa
+      })),
       recentGuests,
       recentCheckIns: recentCheckIns.map(c => ({
         id: c.id,

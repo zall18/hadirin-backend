@@ -355,6 +355,7 @@ const logout = async (req, res) => {
     // Untuk stateless JWT, logout cukup di-handle di client
     // Tapi kita bisa log aktivitas logout jika diperlukan
     
+    
     // Update last activity atau log logout
     if (req.user) {
       await prisma.user.update({

@@ -30,7 +30,13 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(cookieParser());
 app.use(express.static(path.join(__dirname, 'public')));
-app.use(cors());
+app.use(cors({
+  origin: 'http://localhost:3001', // Ganti dengan URL & Port Next.js kamu berjalan
+  methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
+  allowedHeaders: ['Content-Type', 'Authorization'],
+  credentials: true // SANGAT PENTING: Mengizinkan Frontend mengirim token/cookie
+}));
+
 
 app.get('/', (req, res) => {
     res.json({ msg: "Hadirin API is Running Smoothly! 🚀" });
@@ -66,6 +72,7 @@ app.use(function(err, req, res, next) {
     message: err.message || 'Internal Server Error'
   });
 });
+
 
 app.listen(PORT, () => {
     console.log(`Server jalan di http://localhost:${PORT}`);
