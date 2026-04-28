@@ -130,10 +130,7 @@ const login = async (req, res) => {
       });
     }
 
-    const { email, password, ipAddress } = req.body;
-
-    console.log("test");
-
+    const { email, password, ipAddress } = req.body;re
     // Cari user berdasarkan email
     const user = await prisma.user.findUnique({
       where: { email },
